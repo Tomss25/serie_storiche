@@ -6,59 +6,51 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Data Extractor Pro", layout="wide")
 
 st.title("🚀 Financial Data Extractor")
-st.markdown("Smetti di dipendere da piattaforme chiuse. Estrai i tuoi dati in autonomia.")
 
-# --- SIDEBAR PER INPUT ---
-st.sidebar.header("Parametri di Estrazione")
-
-# Input ISIN / Tickers
-input_data = st.sidebar.text_input("Inserisci Tickers o ISIN (separati da virgola)", "CSSX5.MI, SWDA.MI, AAPL")
+# --- SIDEBAR ---
+st.sidebar.header("Parametri")
+input_data = st.sidebar.text_input("Inserisci Tickers (es: SWDA.MI, AAPL)", "SWDA.MI, AAPL")
 tickers = [t.strip().upper() for t in input_data.split(",")]
-
-# Selezione Orizzonte Temporale
-years = st.sidebar.selectbox("Orizzonte Temporale (Anni)", [3, 5, 10, 15], index=1)
-
-# Selezione Timeframe
-interval_map = {
-    "Daily": "1d",
-    "Weekly": "1wk",
-    "Monthly": "1mo",
-    "Yearly": "1y"
-}
+years = st.sidebar.selectbox("Anni", [3, 5, 10, 15], index=1)
+interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo", "Yearly": "1y"}
 tf_display = st.sidebar.selectbox("Timeframe", list(interval_map.keys()))
-interval = interval_map[tf_display]
 
 if st.sidebar.button("Estrai Serie Storiche"):
     start_date = datetime.now() - timedelta(days=years*365)
     
     try:
-        # Download dati
-        data = yf.download(tickers, start=start_date, interval=interval)['Adj Close']
+        # Download con auto_adjust=True per evitare problemi di nomi colonne
+        data = yf.download(tickers, start=start_date, interval=interval_map[tf_display])
         
         if data.empty:
-            st.error("Nessun dato trovato. Controlla i Ticker inseriti.")
+            st.error("Dati non trovati. Verifica i Tickers.")
         else:
-            # Formattazione richiesta: DATA | NOME | (Multi-colonna)
-            # Pulizia per il formato specifico
-            df_final = data.copy()
+            # GESTIONE ERRORE 'Adj Close': 
+            # Selezioniamo solo i prezzi di chiusura indipendentemente dalla struttura
+            if 'Adj Close' in data.columns:
+                df_final = data['Adj Close']
+            else:
+                df_final = data['Close']
+
+            # Se scarichi UN SOLO ticker, Pandas restituisce una Serie. La trasformiamo in DataFrame.
+            if isinstance(df_final, pd.Series):
+                df_final = df_final.to_frame(name=tickers[0])
+
+            # Formattazione indice data
             df_final.index = df_final.index.strftime('%Y-%m-%d')
             
-            st.subheader(f"Anteprima Dati ({tf_display})")
+            st.subheader("Anteprima Serie Storiche")
             st.dataframe(df_final, use_container_width=True)
 
-            # Preparazione CSV conforme alla tua richiesta
-            # CSV Standard: Data come prima colonna, nomi asset come header
+            # Preparazione CSV con separatore | come richiesto
             csv = df_final.to_csv(sep="|")
 
             st.download_button(
-                label="📥 Scarica Serie Storiche in CSV",
+                label="📥 Scarica in CSV",
                 data=csv,
-                file_name=f"serie_storiche_{years}y.csv",
+                file_name=f"estrazione_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
             )
             
     except Exception as e:
-        st.error(f"Errore tecnico: {e}")
-
-else:
-    st.info("Configura i parametri a sinistra e clicca su 'Estrai'")
+        st.error(f"Errore tecnico: {str(e)}")
