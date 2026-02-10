@@ -1,5 +1,6 @@
 import streamlit as st
 import yfinance as yf
+import mstarpy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,180 +9,153 @@ import re
 from datetime import datetime, timedelta
 
 # --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(page_title="ESTRAZIONE SERIE STORICHE", layout="wide")
-
-st.title("📊 CDG Tool Pro: Estrazione serie storiche")
+st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
+st.title("📊 AlphaTool Pro: Hybrid Engine (Yahoo Priority)")
 st.markdown("---")
 
-# --- SIDEBAR: INPUT E PARAMETRI ---
+# --- SIDEBAR ---
 st.sidebar.header("⚙️ Configurazione")
-
-# Area di testo libera per inserire i codici
 raw_input = st.sidebar.text_area(
     "Lista Tickers / ISIN", 
-    value="SWDA.MI\nEIMI.MI\nAAPL\nGLUX.MI", 
+    value="SWDA.MI\nLU1287022708\nAAPL", 
     height=150,
-    help="Incolla qui i tuoi codici. Il tool ignora spazi, virgole e testo inutile."
+    help="Inserisci i codici. Il sistema cercherà prima su Yahoo, poi su Morningstar."
 )
-
-# Regex per pulire l'input e trovare solo i codici validi
 tickers_input = re.findall(r"[\w\.\-]+", raw_input.upper())
 
-# Selezione Orizzonte Temporale
-years = st.sidebar.selectbox("Orizzonte Temporale (Anni)", [1, 3, 5, 10, 15], index=1)
+years = st.sidebar.selectbox("Orizzonte Temporale", [1, 3, 5, 10], index=1)
+# Calcoliamo la data di inizio una volta sola
+start_date = datetime.now() - timedelta(days=years*365)
+end_date = datetime.now()
 
-# Selezione Frequenza Dati
-interval_map = {"Giornaliero": "1d", "Settimanale": "1wk", "Mensile": "1mo"}
-tf_key = st.sidebar.selectbox("Frequenza", list(interval_map.keys()))
-interval = interval_map[tf_key]
+# --- FUNZIONI DI ESTRAZIONE ---
 
-# Tasto di avvio
-if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
+def get_data_yahoo(ticker, start_dt):
+    """Tentativo 1: Yahoo Finance (Veloce)"""
+    try:
+        df = yf.download(ticker, start=start_dt, progress=False)
+        if not df.empty:
+            col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
+            series = df[col].squeeze()
+            if isinstance(series, pd.Series):
+                # Pulizia base
+                series = series.ffill()
+                return series
+    except:
+        return None
+    return None
+
+def get_data_morningstar(isin, start_dt, end_dt):
+    """Tentativo 2: Morningstar (Lento ma profondo)"""
+    try:
+        # Cerca il fondo per ISIN o Nome
+        fund = mstarpy.Funds(term=isin, country="it")
+        # Scarica storico NAV
+        history = fund.nav(start_date=start_dt, end_date=end_dt, frequency="daily")
+        
+        if history:
+            df = pd.DataFrame(history)
+            df['date'] = pd.to_datetime(df['date'])
+            df.set_index('date', inplace=True)
+            series = df['nav']
+            # Rimuove timezone se presente per allinearsi con Yahoo
+            series.index = series.index.normalize().tz_localize(None)
+            return series
+    except:
+        return None
+    return None
+
+# --- ESECUZIONE ---
+if st.sidebar.button("🔥 ESEGUI ANALISI"):
     if not tickers_input:
-        st.error("⚠️ Inserisci almeno un codice valido per iniziare.")
+        st.error("Inserisci dei codici.")
     else:
-        start_date = datetime.now() - timedelta(days=years*365)
         all_series = {}
         metrics = []
-
-        # --- FASE 1: DOWNLOAD E ELABORAZIONE ---
-        with st.spinner('Accesso ai server finanziari e calcolo metriche...'):
+        
+        with st.spinner('Ricerca in corso (Priorità: Yahoo -> Fallback: Morningstar)...'):
             for t in tickers_input:
-                try:
-                    # Download singolo per evitare conflitti Multi-Index
-                    df = yf.download(t, start=start_date, interval=interval, progress=False)
+                series = None
+                source = "N/A"
+                
+                # 1. PRIMO TENTATIVO: YAHOO FINANCE
+                series = get_data_yahoo(t, start_date)
+                
+                if series is not None:
+                    source = "Yahoo"
+                else:
+                    # 2. SECONDO TENTATIVO: MORNINGSTAR (SOLO SE YAHOO FALLISCE)
+                    # Morningstar lavora meglio con ISIN puliti, quindi proviamo
+                    series = get_data_morningstar(t, start_date, end_date)
+                    if series is not None:
+                        source = "Morningstar"
+
+                # --- ELABORAZIONE DATI TROVATI ---
+                if series is not None:
+                    series.name = t
+                    all_series[t] = series
                     
-                    if not df.empty:
-                        # Gestione dinamica della colonna prezzi (Adj Close vs Close)
-                        col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
+                    # Calcolo Metriche
+                    returns = series.pct_change().dropna()
+                    if len(series) > 0:
+                        tot_ret = ((series.iloc[-1] / series.iloc[0]) - 1) * 100
+                        vol = returns.std() * np.sqrt(252) * 100
                         
-                        # .squeeze() trasforma il DataFrame (se singola colonna) in Series
-                        series = df[col].squeeze()
+                        # Max Drawdown
+                        roll_max = series.cummax()
+                        drawdown = (series - roll_max) / roll_max
+                        max_dd = drawdown.min() * 100
                         
-                        # Verifica che sia effettivamente una Series temporale
-                        if isinstance(series, pd.Series):
-                            # Pulizia dati mancanti (fill forward)
-                            series = series.ffill()
-                            all_series[t] = series
-                            
-                            # --- CALCOLO KPI FINANZIARI ---
-                            # Rendimenti percentuali
-                            returns = series.pct_change().dropna()
-                            
-                            # Rendimento Totale Periodo
-                            if len(series) > 0:
-                                total_ret = ((series.iloc[-1] / series.iloc[0]) - 1) * 100
-                                
-                                # CAGR (Compound Annual Growth Rate)
-                                years_actual = (series.index[-1] - series.index[0]).days / 365.25
-                                if years_actual > 0:
-                                    cagr = (((series.iloc[-1] / series.iloc[0]) ** (1/years_actual)) - 1) * 100
-                                else:
-                                    cagr = 0
-                            else:
-                                total_ret = 0
-                                cagr = 0
+                        metrics.append({
+                            "Ticker": t,
+                            "Fonte": source,
+                            "Prezzo": round(series.iloc[-1], 2),
+                            "Rend %": round(tot_ret, 2),
+                            "Volat %": round(vol, 2),
+                            "Max DD %": round(max_dd, 2)
+                        })
+                else:
+                    st.warning(f"⚠️ Dati non trovati per {t} (Né su Yahoo, né su Morningstar)")
 
-                            # Volatilità Annualizzata
-                            # 252 giorni trading, 52 settimane, 12 mesi
-                            ann_factor = 252 if interval == "1d" else (52 if interval == "1wk" else 12)
-                            vol = returns.std() * np.sqrt(ann_factor) * 100
-                            
-                            # Max Drawdown
-                            roll_max = series.cummax()
-                            drawdown = (series - roll_max) / roll_max
-                            max_dd = drawdown.min() * 100
-                            
-                            # Sharpe Ratio (Semplificato, Risk Free = 2%)
-                            sharpe = (cagr - 2) / vol if vol > 0 else 0
-                            
-                            metrics.append({
-                                "Ticker": t,
-                                "Ultimo Prezzo": round(series.iloc[-1], 2),
-                                "Rend. Tot %": round(total_ret, 2),
-                                "CAGR %": round(cagr, 2),
-                                "Volatilità %": round(vol, 2),
-                                "Max DD %": round(max_dd, 2),
-                                "Sharpe Ratio": round(sharpe, 2)
-                            })
-                    else:
-                        st.warning(f"⚠️ Nessun dato trovato per: {t}")
-                except Exception as e:
-                    st.error(f"❌ Errore critico su {t}: {str(e)}")
-
-        # --- FASE 2: VISUALIZZAZIONE RISULTATI ---
+        # --- VISUALIZZAZIONE ---
         if all_series:
-            # Creazione DataFrame Unico allineato sulle date
-            df_final = pd.DataFrame(all_series)
+            # Creazione DataFrame Unico
+            df_final = pd.DataFrame(all_series).ffill().dropna()
             
-            # Ordiniamo per data decrescente (più recente in alto)
-            df_display = df_final.sort_index(ascending=False).round(2)
-            # Formattiamo la data come stringa per visualizzazione pulita
-            df_display.index = df_display.index.strftime('%Y-%m-%d')
-
-            # ---------------------------------------------------------
-            # 1. TABELLA SERIE STORICHE (SPOSTATA IN CIMA COME RICHIESTO)
-            # ---------------------------------------------------------
+            # ORDINAMENTO GRAFICO: PRIMA I DATI
             st.subheader("📅 Serie Storiche (Prezzi)")
-            st.dataframe(df_display, use_container_width=True, height=500)
+            st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=500)
             
             st.markdown("---")
 
-            # ---------------------------------------------------------
-            # 2. GRAFICI E METRICHE (SPOSTATI SOTTO)
-            # ---------------------------------------------------------
-            col_chart, col_kpi = st.columns([2, 1])
-
-            with col_chart:
-                st.subheader("📈 Performance Comparata (Base 100)")
-                # Normalizzazione a base 100 per confronto equo
-                df_b100 = (df_final / df_final.iloc[0]) * 100
-                st.line_chart(df_b100)
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.subheader("📈 Performance (Base 100)")
+                if not df_final.empty:
+                    df_b100 = (df_final / df_final.iloc[0]) * 100
+                    st.line_chart(df_b100)
+                else:
+                    st.info("Dati insufficienti per il grafico (date non allineate).")
             
-            with col_kpi:
-                st.subheader("🏆 Classifica Performance")
-                # Creiamo un DataFrame dalle metriche per visualizzarlo bene
-                df_metrics = pd.DataFrame(metrics).set_index("Ticker")
-                # Evidenziamo i valori massimi
-                st.dataframe(df_metrics.style.highlight_max(axis=0, color='#90EE90'), use_container_width=True)
+            with col2:
+                st.subheader("🏆 Analisi")
+                st.dataframe(pd.DataFrame(metrics).set_index("Ticker"), use_container_width=True)
 
             st.markdown("---")
-
-            # ---------------------------------------------------------
-            # 3. MATRICE DI CORRELAZIONE (IN CODA)
-            # ---------------------------------------------------------
+            
+            # MATRICE DI CORRELAZIONE
             st.subheader("🔗 Matrice di Correlazione")
             if len(df_final.columns) > 1:
                 corr = df_final.pct_change().corr()
-                fig, ax = plt.subplots(figsize=(10, 5))
+                fig, ax = plt.subplots(figsize=(10, 4))
                 sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax)
                 st.pyplot(fig)
-            else:
-                st.info("Necessari almeno 2 titoli per calcolare la correlazione.")
 
-            # --- FASE 3: EXPORT CSV PER EXCEL ITALIANO ---
-            st.markdown("### 📥 Area Download")
-            
-            # Preparazione CSV
-            # 1. Impostiamo il nome indice
+            # EXPORT
+            st.markdown("### 📥 Download")
             df_final.index.name = "Data"
-            # 2. Formattazione Data per il CSV
-            # Nota: uso una copia per non rovinare l'indice originale se servisse per altri calcoli futuri
-            df_csv = df_final.copy()
-            df_csv.index = df_csv.index.strftime('%d/%m/%Y')
-            
-            # 3. Conversione in CSV con ; come separatore e , come decimale
-            csv = df_csv.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
-            
-            st.download_button(
-                label="SCARICA FILE EXCEL (.csv)",
-                data=csv,
-                file_name=f"Analisi_Portafoglio_{datetime.now().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                help="Formattato con colonne separate (;) e decimali con virgola (,) per Excel Italiano."
-            )
-
+            # Formattazione per Excel Italiano (Sep=; Dec=,)
+            csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
+            st.download_button("SCARICA CSV COMPLETO", csv, "Analisi_Hybrid.csv", "text/csv")
         else:
-            st.error("La ricerca non ha prodotto risultati validi. Controlla i Ticker inseriti.")
-
-
+            st.error("Nessun dato valido estratto.")
