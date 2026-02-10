@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # --- CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="ESTRAZIONE SERIE STORICHE", layout="wide")
 
-st.title("📊 AlphaTool Pro: Estrazione Dati")
+st.title("📊 CDG Tool Pro: Estrazione serie storiche")
 st.markdown("---")
 
 # --- SIDEBAR: INPUT E PARAMETRI ---
@@ -183,4 +183,5 @@ if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
 
         else:
             st.error("La ricerca non ha prodotto risultati validi. Controlla i Ticker inseriti.")
+
 
