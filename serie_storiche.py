@@ -119,7 +119,17 @@ if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
             # Formattiamo la data come stringa per visualizzazione pulita
             df_display.index = df_display.index.strftime('%Y-%m-%d')
 
-            # Layout a Colonne per Grafico e Metriche
+            # ---------------------------------------------------------
+            # 1. TABELLA SERIE STORICHE (SPOSTATA IN CIMA COME RICHIESTO)
+            # ---------------------------------------------------------
+            st.subheader("📅 Serie Storiche (Prezzi)")
+            st.dataframe(df_display, use_container_width=True, height=500)
+            
+            st.markdown("---")
+
+            # ---------------------------------------------------------
+            # 2. GRAFICI E METRICHE (SPOSTATI SOTTO)
+            # ---------------------------------------------------------
             col_chart, col_kpi = st.columns([2, 1])
 
             with col_chart:
@@ -137,21 +147,17 @@ if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
 
             st.markdown("---")
 
-            col_data, col_corr = st.columns([1, 1])
-
-            with col_data:
-                st.subheader("📅 Serie Storiche (Prezzi)")
-                st.dataframe(df_display, use_container_width=True, height=400)
-
-            with col_corr:
-                st.subheader("🔗 Matrice di Correlazione")
-                if len(df_final.columns) > 1:
-                    corr = df_final.pct_change().corr()
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax)
-                    st.pyplot(fig)
-                else:
-                    st.info("Necessari almeno 2 titoli per calcolare la correlazione.")
+            # ---------------------------------------------------------
+            # 3. MATRICE DI CORRELAZIONE (IN CODA)
+            # ---------------------------------------------------------
+            st.subheader("🔗 Matrice di Correlazione")
+            if len(df_final.columns) > 1:
+                corr = df_final.pct_change().corr()
+                fig, ax = plt.subplots(figsize=(10, 5))
+                sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax)
+                st.pyplot(fig)
+            else:
+                st.info("Necessari almeno 2 titoli per calcolare la correlazione.")
 
             # --- FASE 3: EXPORT CSV PER EXCEL ITALIANO ---
             st.markdown("### 📥 Area Download")
@@ -159,12 +165,13 @@ if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
             # Preparazione CSV
             # 1. Impostiamo il nome indice
             df_final.index.name = "Data"
-            # 2. Formattazione Data
-            df_final.index = df_final.index.strftime('%d/%m/%Y')
+            # 2. Formattazione Data per il CSV
+            # Nota: uso una copia per non rovinare l'indice originale se servisse per altri calcoli futuri
+            df_csv = df_final.copy()
+            df_csv.index = df_csv.index.strftime('%d/%m/%Y')
             
             # 3. Conversione in CSV con ; come separatore e , come decimale
-            # encoding='utf-8-sig' è CRUCIALE per Excel
-            csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
+            csv = df_csv.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
             
             st.download_button(
                 label="SCARICA FILE EXCEL (.csv)",
