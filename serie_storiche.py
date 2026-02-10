@@ -25,6 +25,31 @@ st.markdown("""
         background-color: #161B22;
         border-right: 1px solid #30363D;
     }
+    
+    /* --- FIX RICHIESTO: TESTI SIDEBAR BIANCHI --- */
+    /* Forza il colore bianco su tutti gli elementi di testo nella sidebar */
+    section[data-testid="stSidebar"] .stMarkdown, 
+    section[data-testid="stSidebar"] label, 
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
+        color: #FFFFFF !important;
+    }
+
+    /* Input text area specifico per leggibilità */
+    .stTextArea textarea {
+        background-color: #21262D;
+        color: #FFFFFF !important; /* Testo input bianco */
+        border: 1px solid #30363D;
+        border-radius: 10px;
+    }
+    .stTextArea textarea:focus {
+        border-color: #3B82F6;
+        box-shadow: 0 0 0 1px #3B82F6;
+    }
 
     /* BOTTONI - Sfumatura Blu e Bordi Arrotondati */
     div.stButton > button {
@@ -45,42 +70,18 @@ st.markdown("""
         border-color: #60A5FA;
     }
 
-    /* INPUT TEXT AREA - Stile Dark */
-    .stTextArea textarea {
-        background-color: #21262D;
-        color: #E6EDF3;
-        border: 1px solid #30363D;
-        border-radius: 10px;
-    }
-    .stTextArea textarea:focus {
-        border-color: #3B82F6;
-        box-shadow: 0 0 0 1px #3B82F6;
-    }
-
-    /* TITOLI E HEADER - Blu Chiaro per contrasto */
-    h1, h2, h3 {
-        color: #58A6FF !important;
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        font-weight: 600;
-    }
-    
-    /* DATAFRAME E TABELLE - Bordi stondati e Header scuro */
+    /* DATAFRAME E TABELLE */
     div[data-testid="stDataFrame"] {
         border: 1px solid #30363D;
         border-radius: 10px;
         overflow: hidden;
     }
     
-    /* ALERT/INFO BOXES - Styling morbido */
-    div[data-baseweb="notification"] {
-        border-radius: 10px;
-    }
-
-    /* SEPARATORI (HR) */
-    hr {
-        margin: 2em 0;
-        border: 0;
-        border-top: 1px solid #30363D;
+    /* TITOLI HEADER */
+    h1, h2, h3 {
+        color: #58A6FF !important;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -89,8 +90,9 @@ st.title("📊 AlphaTool Pro: Hybrid Engine")
 st.markdown("Analisi finanziaria professionale multi-sorgente (Yahoo + Morningstar).")
 st.markdown("---")
 
-# --- SIDEBAR: LOGICA RIMASTA INVARIATA ---
+# --- SIDEBAR: CONFIGURAZIONE ---
 st.sidebar.header("⚙️ Configurazione")
+
 raw_input = st.sidebar.text_area(
     "Lista Tickers / ISIN", 
     value="SWDA.MI\nLU1287022708\nAAPL", 
@@ -100,15 +102,26 @@ raw_input = st.sidebar.text_area(
 tickers_input = re.findall(r"[\w\.\-]+", raw_input.upper())
 
 years = st.sidebar.selectbox("Orizzonte Temporale", [1, 3, 5, 10], index=1)
-# Calcoliamo la data di inizio una volta sola
+
+# --- NUOVO: SELETTORE TIMEFRAME ---
+freq_options = {
+    "Giornaliero": "D",
+    "Settimanale": "W",
+    "Mensile": "ME" # 'ME' è il nuovo standard Pandas per Month End
+}
+selected_freq_label = st.sidebar.selectbox("Frequenza Dati", list(freq_options.keys()))
+selected_freq_code = freq_options[selected_freq_label]
+
+# Calcolo data inizio
 start_date = datetime.now() - timedelta(days=years*365)
 end_date = datetime.now()
 
-# --- FUNZIONI DI ESTRAZIONE (LOGICA INVARIATA) ---
+# --- FUNZIONI DI ESTRAZIONE ---
 
 def get_data_yahoo(ticker, start_dt):
-    """Tentativo 1: Yahoo Finance (Veloce)"""
+    """Tentativo 1: Yahoo Finance (Scarica sempre Daily per precisione)"""
     try:
+        # Scarichiamo sempre daily per poi fare resample preciso
         df = yf.download(ticker, start=start_dt, progress=False)
         if not df.empty:
             col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
@@ -121,7 +134,7 @@ def get_data_yahoo(ticker, start_dt):
     return None
 
 def get_data_morningstar(isin, start_dt, end_dt):
-    """Tentativo 2: Morningstar (Lento ma profondo)"""
+    """Tentativo 2: Morningstar"""
     try:
         fund = mstarpy.Funds(term=isin, country="it")
         history = fund.nav(start_date=start_dt, end_date=end_dt, frequency="daily")
@@ -143,56 +156,64 @@ if st.sidebar.button("🔥 ESEGUI ANALISI"):
         st.error("Inserisci dei codici.")
     else:
         all_series = {}
-        metrics = []
         
         with st.spinner('Ricerca in corso (Priorità: Yahoo -> Fallback: Morningstar)...'):
             for t in tickers_input:
                 series = None
-                source = "N/A"
                 
-                # 1. PRIMO TENTATIVO: YAHOO FINANCE
+                # 1. YAHOO
                 series = get_data_yahoo(t, start_date)
                 
-                if series is not None:
-                    source = "Yahoo"
-                else:
-                    # 2. SECONDO TENTATIVO: MORNINGSTAR
+                # 2. MORNINGSTAR (Fallback)
+                if series is None:
                     series = get_data_morningstar(t, start_date, end_date)
-                    if series is not None:
-                        source = "Morningstar"
 
-                # --- ELABORAZIONE DATI TROVATI ---
                 if series is not None:
                     series.name = t
                     all_series[t] = series
-                    
-                    # Calcolo Metriche
-                    returns = series.pct_change().dropna()
-                    if len(series) > 0:
-                        tot_ret = ((series.iloc[-1] / series.iloc[0]) - 1) * 100
-                        vol = returns.std() * np.sqrt(252) * 100
-                        roll_max = series.cummax()
-                        drawdown = (series - roll_max) / roll_max
-                        max_dd = drawdown.min() * 100
-                        
-                        metrics.append({
-                            "Ticker": t,
-                            "Fonte": source,
-                            "Prezzo": round(series.iloc[-1], 2),
-                            "Rend %": round(tot_ret, 2),
-                            "Volat %": round(vol, 2),
-                            "Max DD %": round(max_dd, 2)
-                        })
                 else:
                     st.warning(f"⚠️ Dati non trovati per {t}")
 
-        # --- VISUALIZZAZIONE ---
+        # --- ELABORAZIONE E RESAMPLING ---
         if all_series:
-            # Creazione DataFrame Unico
-            df_final = pd.DataFrame(all_series).ffill().dropna()
+            # Creazione DataFrame Unico Giornaliero
+            df_daily = pd.DataFrame(all_series).ffill().dropna()
             
-            # ORDINAMENTO GRAFICO: PRIMA I DATI
-            st.subheader("📅 Serie Storiche (Prezzi)")
+            # Applicazione del Timeframe scelto (Resampling)
+            if selected_freq_code == "D":
+                df_final = df_daily
+                ann_factor = 252
+            else:
+                # Prende l'ultimo prezzo del periodo (settimana/mese)
+                df_final = df_daily.resample(selected_freq_code).last()
+                # Fattori di annualizzazione volatilità
+                ann_factor = 52 if selected_freq_code == "W" else 12
+
+            # Calcolo Metriche sul DataFrame Finale (Resampled)
+            metrics = []
+            for col in df_final.columns:
+                s = df_final[col]
+                if len(s) > 1:
+                    returns = s.pct_change().dropna()
+                    tot_ret = ((s.iloc[-1] / s.iloc[0]) - 1) * 100
+                    vol = returns.std() * np.sqrt(ann_factor) * 100
+                    
+                    roll_max = s.cummax()
+                    drawdown = (s - roll_max) / roll_max
+                    max_dd = drawdown.min() * 100
+                    
+                    metrics.append({
+                        "Ticker": col,
+                        "Prezzo": round(s.iloc[-1], 2),
+                        "Rend %": round(tot_ret, 2),
+                        "Volat %": round(vol, 2),
+                        "Max DD %": round(max_dd, 2)
+                    })
+
+            # --- VISUALIZZAZIONE ---
+            
+            # 1. TABELLA SERIE STORICHE (PRIMA COSA)
+            st.subheader(f"📅 Serie Storiche ({selected_freq_label})")
             st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=500)
             
             st.markdown("---")
@@ -201,11 +222,8 @@ if st.sidebar.button("🔥 ESEGUI ANALISI"):
             with col1:
                 st.subheader("📈 Performance (Base 100)")
                 if not df_final.empty:
-                    # Usiamo uno stile scuro anche per il grafico nativo di Streamlit
                     df_b100 = (df_final / df_final.iloc[0]) * 100
                     st.line_chart(df_b100)
-                else:
-                    st.info("Dati insufficienti per il grafico.")
             
             with col2:
                 st.subheader("🏆 Analisi")
@@ -213,14 +231,12 @@ if st.sidebar.button("🔥 ESEGUI ANALISI"):
 
             st.markdown("---")
             
-            # MATRICE DI CORRELAZIONE (STYLING PER DARK MODE)
+            # MATRICE CORRELAZIONE (Dark Style)
             st.subheader("🔗 Matrice di Correlazione")
             if len(df_final.columns) > 1:
                 corr = df_final.pct_change().corr()
-                # Impostiamo il contesto scuro per Matplotlib/Seaborn
                 plt.style.use("dark_background")
                 fig, ax = plt.subplots(figsize=(10, 4))
-                # Colormap 'mako' o 'rocket' sono ottime su sfondo scuro, ma 'RdYlGn' è classica
                 sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, 
                            cbar_kws={'label': 'Correlazione'})
                 st.pyplot(fig)
@@ -228,8 +244,12 @@ if st.sidebar.button("🔥 ESEGUI ANALISI"):
             # EXPORT
             st.markdown("### 📥 Download")
             df_final.index.name = "Data"
-            # Formattazione per Excel Italiano (Sep=; Dec=,)
             csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
-            st.download_button("SCARICA CSV COMPLETO", csv, "Analisi_Hybrid_Pro.csv", "text/csv")
+            st.download_button(
+                label=f"SCARICA CSV ({selected_freq_label.upper()})", 
+                data=csv, 
+                file_name=f"Analisi_{selected_freq_label}.csv", 
+                mime="text/csv"
+            )
         else:
             st.error("Nessun dato valido estratto.")
