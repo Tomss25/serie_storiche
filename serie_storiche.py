@@ -2,96 +2,177 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import re
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Data Extractor Pro v2", layout="wide")
+# --- CONFIGURAZIONE PAGINA ---
+st.set_page_config(page_title="AlphaTool Pro v3", layout="wide")
 
-st.title("🚀 Financial Data Extractor & Analyzer")
+st.title("📊 AlphaTool Pro: Analisi & Estrazione Dati")
 st.markdown("---")
 
-# --- SIDEBAR ---
-st.sidebar.header("Configurazione")
-raw_input = st.sidebar.text_area("Inserisci Tickers o ISIN", 
-                                 value="SWDA.MI\nAAPL\nCSSX5.MI", 
-                                 height=150,
-                                 help="Incolla liberamente. Gestisce spazi, virgole e invii a capo.")
+# --- SIDEBAR: INPUT E PARAMETRI ---
+st.sidebar.header("⚙️ Configurazione")
 
-# Regex avanzata per catturare correttamente i ticker (incluso punti e trattini)
+# Area di testo libera per inserire i codici
+raw_input = st.sidebar.text_area(
+    "Lista Tickers / ISIN", 
+    value="SWDA.MI\nEIMI.MI\nAAPL\nGLUX.MI", 
+    height=150,
+    help="Incolla qui i tuoi codici. Il tool ignora spazi, virgole e testo inutile."
+)
+
+# Regex per pulire l'input e trovare solo i codici validi
 tickers_input = re.findall(r"[\w\.\-]+", raw_input.upper())
 
-years = st.sidebar.selectbox("Orizzonte Temporale (Anni)", [3, 5, 10, 15], index=1)
-interval_map = {"Daily": "1d", "Weekly": "1wk", "Monthly": "1mo"}
-tf_key = st.sidebar.selectbox("Frequenza Dati", list(interval_map.keys()))
+# Selezione Orizzonte Temporale
+years = st.sidebar.selectbox("Orizzonte Temporale (Anni)", [1, 3, 5, 10, 15], index=1)
+
+# Selezione Frequenza Dati
+interval_map = {"Giornaliero": "1d", "Settimanale": "1wk", "Mensile": "1mo"}
+tf_key = st.sidebar.selectbox("Frequenza", list(interval_map.keys()))
 interval = interval_map[tf_key]
 
-if st.sidebar.button("Estrai ed Analizza"):
+# Tasto di avvio
+if st.sidebar.button("🔥 ESEGUI ANALISI COMPLETA"):
     if not tickers_input:
-        st.error("Inserisci almeno un codice valido.")
+        st.error("⚠️ Inserisci almeno un codice valido per iniziare.")
     else:
         start_date = datetime.now() - timedelta(days=years*365)
         all_series = {}
         metrics = []
 
-        with st.spinner('Scarico i dati da Yahoo Finance...'):
+        # --- FASE 1: DOWNLOAD E ELABORAZIONE ---
+        with st.spinner('Accesso ai server finanziari e calcolo metriche...'):
             for t in tickers_input:
                 try:
-                    # Scarico singolarmente per evitare conflitti di Multi-Index
+                    # Download singolo per evitare conflitti Multi-Index
                     df = yf.download(t, start=start_date, interval=interval, progress=False)
                     
                     if not df.empty:
-                        # Selezione dinamica della colonna prezzi
+                        # Gestione dinamica della colonna prezzi (Adj Close vs Close)
                         col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
-                        # Appiattiamo il dataframe se yfinance restituisce multi-index
-                        series = df[col].squeeze() 
                         
+                        # .squeeze() trasforma il DataFrame (se singola colonna) in Series
+                        series = df[col].squeeze()
+                        
+                        # Verifica che sia effettivamente una Series temporale
                         if isinstance(series, pd.Series):
-                            series.name = t
-                            all_series[t] = series.round(2)
+                            # Pulizia dati mancanti (fill forward)
+                            series = series.ffill()
+                            all_series[t] = series
                             
-                            # CALCOLO METRICHE BASE
+                            # --- CALCOLO KPI FINANZIARI ---
+                            # Rendimenti percentuali
                             returns = series.pct_change().dropna()
-                            total_ret = ((series.iloc[-1] / series.iloc[0]) - 1) * 100
-                            # Volatilità annua (approssimata)
-                            ann_vol = returns.std() * np.sqrt(252) * 100 if tf_key == "Daily" else 0
+                            
+                            # Rendimento Totale Periodo
+                            if len(series) > 0:
+                                total_ret = ((series.iloc[-1] / series.iloc[0]) - 1) * 100
+                                
+                                # CAGR (Compound Annual Growth Rate)
+                                years_actual = (series.index[-1] - series.index[0]).days / 365.25
+                                if years_actual > 0:
+                                    cagr = (((series.iloc[-1] / series.iloc[0]) ** (1/years_actual)) - 1) * 100
+                                else:
+                                    cagr = 0
+                            else:
+                                total_ret = 0
+                                cagr = 0
+
+                            # Volatilità Annualizzata
+                            # 252 giorni trading, 52 settimane, 12 mesi
+                            ann_factor = 252 if interval == "1d" else (52 if interval == "1wk" else 12)
+                            vol = returns.std() * np.sqrt(ann_factor) * 100
+                            
+                            # Max Drawdown
+                            roll_max = series.cummax()
+                            drawdown = (series - roll_max) / roll_max
+                            max_dd = drawdown.min() * 100
+                            
+                            # Sharpe Ratio (Semplificato, Risk Free = 2%)
+                            sharpe = (cagr - 2) / vol if vol > 0 else 0
                             
                             metrics.append({
                                 "Ticker": t,
-                                "Ultimo Prezzo": f"{series.iloc[-1]:.2f}",
-                                "Rendimento Tot %": f"{total_ret:.2f}%",
-                                "Volatilità Ann. %": f"{ann_vol:.2f}%" if ann_vol > 0 else "N/A"
+                                "Ultimo Prezzo": round(series.iloc[-1], 2),
+                                "Rend. Tot %": round(total_ret, 2),
+                                "CAGR %": round(cagr, 2),
+                                "Volatilità %": round(vol, 2),
+                                "Max DD %": round(max_dd, 2),
+                                "Sharpe Ratio": round(sharpe, 2)
                             })
                     else:
                         st.warning(f"⚠️ Nessun dato trovato per: {t}")
                 except Exception as e:
-                    st.error(f"❌ Errore su {t}: {str(e)}")
+                    st.error(f"❌ Errore critico su {t}: {str(e)}")
 
+        # --- FASE 2: VISUALIZZAZIONE RISULTATI ---
         if all_series:
-            # Creazione Tabella Finale
+            # Creazione DataFrame Unico allineato sulle date
             df_final = pd.DataFrame(all_series)
-            # Ordiniamo per data decrescente per l'anteprima
-            df_preview = df_final.sort_index(ascending=False)
-            df_preview.index = df_preview.index.strftime('%Y-%m-%d')
-
-            # --- VISUALIZZAZIONE ---
-            col1, col2 = st.columns([2, 1])
             
-            with col1:
-                st.subheader("Serie Storiche")
-                st.dataframe(df_preview, use_container_width=True)
-            
-            with col2:
-                st.subheader("Analisi Rapida")
-                st.table(pd.DataFrame(metrics).set_index("Ticker"))
+            # Ordiniamo per data decrescente (più recente in alto)
+            df_display = df_final.sort_index(ascending=False).round(2)
+            # Formattiamo la data come stringa per visualizzazione pulita
+            df_display.index = df_display.index.strftime('%Y-%m-%d')
 
-            # --- DOWNLOAD ---
+            # Layout a Colonne per Grafico e Metriche
+            col_chart, col_kpi = st.columns([2, 1])
+
+            with col_chart:
+                st.subheader("📈 Performance Comparata (Base 100)")
+                # Normalizzazione a base 100 per confronto equo
+                df_b100 = (df_final / df_final.iloc[0]) * 100
+                st.line_chart(df_b100)
+            
+            with col_kpi:
+                st.subheader("🏆 Classifica Performance")
+                # Creiamo un DataFrame dalle metriche per visualizzarlo bene
+                df_metrics = pd.DataFrame(metrics).set_index("Ticker")
+                # Evidenziamo i valori massimi
+                st.dataframe(df_metrics.style.highlight_max(axis=0, color='#90EE90'), use_container_width=True)
+
             st.markdown("---")
-            csv = df_final.to_csv(sep="|", decimal=",")
+
+            col_data, col_corr = st.columns([1, 1])
+
+            with col_data:
+                st.subheader("📅 Serie Storiche (Prezzi)")
+                st.dataframe(df_display, use_container_width=True, height=400)
+
+            with col_corr:
+                st.subheader("🔗 Matrice di Correlazione")
+                if len(df_final.columns) > 1:
+                    corr = df_final.pct_change().corr()
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax)
+                    st.pyplot(fig)
+                else:
+                    st.info("Necessari almeno 2 titoli per calcolare la correlazione.")
+
+            # --- FASE 3: EXPORT CSV PER EXCEL ITALIANO ---
+            st.markdown("### 📥 Area Download")
+            
+            # Preparazione CSV
+            # 1. Impostiamo il nome indice
+            df_final.index.name = "Data"
+            # 2. Formattazione Data
+            df_final.index = df_final.index.strftime('%d/%m/%Y')
+            
+            # 3. Conversione in CSV con ; come separatore e , come decimale
+            # encoding='utf-8-sig' è CRUCIALE per Excel
+            csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
+            
             st.download_button(
-                label="📥 Scarica CSV (DATA | NOME1 | NOME2)",
+                label="SCARICA FILE EXCEL (.csv)",
                 data=csv,
-                file_name=f"analisi_portafoglio_{datetime.now().strftime('%Y%m%d')}.csv",
+                file_name=f"Analisi_Portafoglio_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
+                help="Formattato con colonne separate (;) e decimali con virgola (,) per Excel Italiano."
             )
+
         else:
-            st.error("La ricerca non ha prodotto risultati. Verifica i ticker su Yahoo Finance.")
+            st.error("La ricerca non ha prodotto risultati validi. Controlla i Ticker inseriti.")
