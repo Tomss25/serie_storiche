@@ -1,7 +1,10 @@
 streamlit
 yfinance
+mstarpy
 pandas
 numpy
+scipy
 matplotlib
 seaborn
-mstarpy
+plotly
+scikit-learn
