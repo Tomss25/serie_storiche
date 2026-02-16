@@ -3,253 +3,131 @@ import yfinance as yf
 import mstarpy
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import re
 from datetime import datetime, timedelta
+from scipy.optimize import minimize
+import plotly.graph_objects as go
+from sklearn.covariance import ledoit_wolf
 
-# --- 1. CONFIGURAZIONE PAGINA E STILE CSS (VISUAL UPDATE) ---
-st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
+# --- CONFIGURAZIONE ---
+st.set_page_config(page_title="AlphaTool Pro: Full Professional", layout="wide")
 
-# INIEZIONE CSS PROFESSIONALE
 st.markdown("""
 <style>
-    /* SFONDO GENERALE APP - Grigio Scuro Professionale */
-    .stApp {
-        background-color: #0E1117;
-        color: #FAFAFA;
-    }
-
-    /* SIDEBAR - Tonalità leggermente più chiara */
-    section[data-testid="stSidebar"] {
-        background-color: #161B22;
-        border-right: 1px solid #30363D;
-    }
-    
-    /* --- FIX RICHIESTO: TESTI SIDEBAR BIANCHI --- */
-    /* Forza il colore bianco su tutti gli elementi di testo nella sidebar */
-    section[data-testid="stSidebar"] .stMarkdown, 
-    section[data-testid="stSidebar"] label, 
-    section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-        color: #FFFFFF !important;
-    }
-
-    /* Input text area specifico per leggibilità */
-    .stTextArea textarea {
-        background-color: #21262D;
-        color: #FFFFFF !important; /* Testo input bianco */
-        border: 1px solid #30363D;
-        border-radius: 10px;
-    }
-    .stTextArea textarea:focus {
-        border-color: #3B82F6;
-        box-shadow: 0 0 0 1px #3B82F6;
-    }
-
-    /* BOTTONI - Sfumatura Blu e Bordi Arrotondati */
-    div.stButton > button {
-        background: linear-gradient(90deg, #1E3A8A 0%, #3B82F6 100%);
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 12px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        width: 100%;
-    }
-    div.stButton > button:hover {
-        background: linear-gradient(90deg, #1E40AF 0%, #60A5FA 100%);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
-        border-color: #60A5FA;
-    }
-
-    /* DATAFRAME E TABELLE */
-    div[data-testid="stDataFrame"] {
-        border: 1px solid #30363D;
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    
-    /* TITOLI HEADER */
-    h1, h2, h3 {
-        color: #58A6FF !important;
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        font-weight: 600;
-    }
+    .stApp { background-color: #0E1117; color: #FAFAFA; }
+    h3 { color: #58A6FF !important; }
+    .stMetric { background-color: #161B22; border: 1px solid #30363D; border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 AlphaTool Pro: Hybrid Engine")
-st.markdown("Analisi finanziaria professionale multi-sorgente (Yahoo + Morningstar).")
-st.markdown("---")
+# --- FUNZIONI DI SERVIZIO ---
 
-# --- SIDEBAR: CONFIGURAZIONE ---
-st.sidebar.header("⚙️ Configurazione")
-
-raw_input = st.sidebar.text_area(
-    "Lista Tickers / ISIN", 
-    value="SWDA.MI\nLU1287022708\nAAPL", 
-    height=150,
-    help="Inserisci i codici. Il sistema cercherà prima su Yahoo, poi su Morningstar."
-)
-tickers_input = re.findall(r"[\w\.\-]+", raw_input.upper())
-
-years = st.sidebar.selectbox("Orizzonte Temporale", [1, 3, 5, 10], index=1)
-
-# --- NUOVO: SELETTORE TIMEFRAME ---
-freq_options = {
-    "Giornaliero": "D",
-    "Settimanale": "W",
-    "Mensile": "ME" # 'ME' è il nuovo standard Pandas per Month End
-}
-selected_freq_label = st.sidebar.selectbox("Frequenza Dati", list(freq_options.keys()))
-selected_freq_code = freq_options[selected_freq_label]
-
-# Calcolo data inizio
-start_date = datetime.now() - timedelta(days=years*365)
-end_date = datetime.now()
-
-# --- FUNZIONI DI ESTRAZIONE ---
-
-def get_data_yahoo(ticker, start_dt):
-    """Tentativo 1: Yahoo Finance (Scarica sempre Daily per precisione)"""
-    try:
-        # Scarichiamo sempre daily per poi fare resample preciso
-        df = yf.download(ticker, start=start_dt, progress=False)
-        if not df.empty:
-            col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
-            series = df[col].squeeze()
-            if isinstance(series, pd.Series):
-                series = series.ffill()
-                return series
-    except:
-        return None
-    return None
-
-def get_data_morningstar(isin, start_dt, end_dt):
-    """Tentativo 2: Morningstar"""
-    try:
-        fund = mstarpy.Funds(term=isin, country="it")
-        history = fund.nav(start_date=start_dt, end_date=end_dt, frequency="daily")
-        
-        if history:
-            df = pd.DataFrame(history)
-            df['date'] = pd.to_datetime(df['date'])
-            df.set_index('date', inplace=True)
-            series = df['nav']
-            series.index = series.index.normalize().tz_localize(None)
-            return series
-    except:
-        return None
-    return None
-
-# --- ESECUZIONE ---
-if st.sidebar.button("🔥 ESEGUI ANALISI"):
-    if not tickers_input:
-        st.error("Inserisci dei codici.")
+def sanitize_csv(df):
+    df = df.reset_index()
+    date_col = None
+    for col in df.columns:
+        if any(x in str(col).lower() for x in ['date', 'data', 'time', 'timestamp']):
+            date_col = col
+            break
+    if date_col:
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce', dayfirst=True)
+        df = df.dropna(subset=[date_col]).set_index(date_col)
     else:
-        all_series = {}
+        df.index = pd.to_datetime(df.index, errors='coerce', dayfirst=True)
+        df = df[df.index.notnull()]
+    df = df.apply(pd.to_numeric, errors='coerce').select_dtypes(include=[np.number]).dropna(axis=1, how='all')
+    return df.ffill().dropna()
+
+def get_robust_covariance(returns):
+    shrunk_cov, shrinkage_coeff = ledoit_wolf(returns)
+    return shrunk_cov * 252, shrinkage_coeff
+
+def solve_frontier(mu, sigma, rf, min_w, max_w, num_points=25):
+    n = len(mu)
+    def get_vol(w): return np.sqrt(np.dot(w.T, np.dot(sigma, w)))
+    bounds = tuple((min_w, max_w) for _ in range(n))
+    res_min = minimize(lambda w: np.sum(mu * w), [1./n]*n, bounds=bounds, constraints=[{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}])
+    res_max = minimize(lambda w: -np.sum(mu * w), [1./n]*n, bounds=bounds, constraints=[{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}])
+    target_returns = np.linspace(np.sum(mu * res_min.x), np.sum(mu * res_max.x), num_points)
+    vols = []
+    for tr in target_returns:
+        res = minimize(get_vol, [1./n]*n, bounds=bounds, constraints=[{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}, {'type': 'eq', 'fun': lambda x: np.sum(mu * x) - tr}])
+        vols.append(res.fun if res.success else None)
+    return target_returns, vols
+
+# --- SIDEBAR ---
+st.sidebar.header("🛡️ Data Ingestion")
+upload_file = st.sidebar.file_uploader("Carica CSV", type=["csv"])
+sep = st.sidebar.selectbox("Separatore", [";", ","], index=0)
+raw_input = st.sidebar.text_area("Fallback Tickers", value="CSSPX.MI\nEIMI.MI\nGLD\nAAPL", height=80)
+tickers = re.findall(r"[\w\.\-]+", raw_input.upper())
+years = st.sidebar.slider("Orizzonte Storico", 1, 15, 5)
+min_w = st.sidebar.slider("Min Peso", 0.0, 0.2, 0.0)
+max_w = st.sidebar.slider("Max Peso", 0.1, 1.0, 0.4)
+rf_rate = st.sidebar.number_input("Risk Free %", 0.0, 10.0, 3.5) / 100
+
+# --- LOGICA ---
+if st.sidebar.button("🚀 ESEGUI ANALISI COMPLETA"):
+    if upload_file:
+        df_final = sanitize_csv(pd.read_csv(upload_file, sep=sep))
+    else:
+        start = datetime.now() - timedelta(days=years*365)
+        all_s = {}
+        for t in tickers:
+            d = yf.download(t, start=start, progress=False)
+            if not d.empty: all_s[t] = d['Adj Close' if 'Adj Close' in d.columns else 'Close'].ffill()
+        df_final = pd.DataFrame(all_s).dropna()
+
+    if not df_final.empty:
+        rets = df_final.pct_change().dropna()
+        mu = rets.mean() * 252
+        sigma, s_coeff = get_robust_covariance(rets)
         
-        with st.spinner('Ricerca in corso (Priorità: Yahoo -> Fallback: Morningstar)...'):
-            for t in tickers_input:
-                series = None
-                
-                # 1. YAHOO
-                series = get_data_yahoo(t, start_date)
-                
-                # 2. MORNINGSTAR (Fallback)
-                if series is None:
-                    series = get_data_morningstar(t, start_date, end_date)
+        # Ottimizzazione Max Sharpe
+        n = len(mu)
+        res_opt = minimize(lambda w: -(np.sum(mu * w) - rf_rate) / np.sqrt(np.dot(w.T, np.dot(sigma, w))), 
+                           [1./n]*n, bounds=tuple((min_w, max_w) for _ in range(n)), 
+                           constraints=[{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}])
+        w_opt = res_opt.x
 
-                if series is not None:
-                    series.name = t
-                    all_series[t] = series
-                else:
-                    st.warning(f"⚠️ Dati non trovati per {t}")
+        tab1, tab2, tab3, tab4 = st.tabs(["📉 Frontiera", "🛡️ Rischio", "📊 Allocazione", "🌊 Drawdown"])
 
-        # --- ELABORAZIONE E RESAMPLING ---
-        if all_series:
-            # Creazione DataFrame Unico Giornaliero
-            df_daily = pd.DataFrame(all_series).ffill().dropna()
+        with tab1:
+            f_rets, f_vols = solve_frontier(mu, sigma, rf_rate, min_w, max_w)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=f_vols, y=f_rets, mode='lines', name='Frontiera Robusta', line=dict(color='#58A6FF', width=3)))
+            p_vol_opt = np.sqrt(np.dot(w_opt.T, np.dot(sigma, w_opt)))
+            p_ret_opt = np.sum(mu * w_opt)
+            fig.add_trace(go.Scatter(x=[p_vol_opt], y=[p_ret_opt], mode='markers', name='Max Sharpe', marker=dict(size=15, color='red', symbol='star')))
+            fig.update_layout(template="plotly_dark", xaxis_title="Rischio", yaxis_title="Rendimento")
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab2:
+            st.metric("Shrinkage Intensity (Ledoit-Wolf)", f"{s_coeff:.2%}")
+            rc = (w_opt * np.dot(sigma, w_opt)) / (p_vol_opt**2)
+            risk_df = pd.DataFrame({'Asset': mu.index, 'Peso': w_opt, 'Risk Contrib': rc})
+            st.bar_chart(risk_df.set_index('Asset'))
+
+        with tab3:
+            st.table(pd.DataFrame({'Peso': w_opt}, index=mu.index).style.format("{:.2%}"))
+
+        with tab4:
+            st.subheader("Analisi Storica dei Drawdown")
+            # Calcolo Equity Line del portafoglio ottimo
+            portfolio_rets = (rets * w_opt).sum(axis=1)
+            equity_line = (1 + portfolio_rets).cumprod()
+            running_max = equity_line.cummax()
+            drawdown = (equity_line - running_max) / running_max
             
-            # Applicazione del Timeframe scelto (Resampling)
-            if selected_freq_code == "D":
-                df_final = df_daily
-                ann_factor = 252
-            else:
-                # Prende l'ultimo prezzo del periodo (settimana/mese)
-                df_final = df_daily.resample(selected_freq_code).last()
-                # Fattori di annualizzazione volatilità
-                ann_factor = 52 if selected_freq_code == "W" else 12
-
-            # Calcolo Metriche sul DataFrame Finale (Resampled)
-            metrics = []
-            for col in df_final.columns:
-                s = df_final[col]
-                if len(s) > 1:
-                    returns = s.pct_change().dropna()
-                    tot_ret = ((s.iloc[-1] / s.iloc[0]) - 1) * 100
-                    vol = returns.std() * np.sqrt(ann_factor) * 100
-                    
-                    roll_max = s.cummax()
-                    drawdown = (s - roll_max) / roll_max
-                    max_dd = drawdown.min() * 100
-                    
-                    metrics.append({
-                        "Ticker": col,
-                        "Prezzo": round(s.iloc[-1], 2),
-                        "Rend %": round(tot_ret, 2),
-                        "Volat %": round(vol, 2),
-                        "Max DD %": round(max_dd, 2)
-                    })
-
-            # --- VISUALIZZAZIONE ---
+            fig_dd = go.Figure()
+            fig_dd.add_trace(go.Scatter(x=drawdown.index, y=drawdown * 100, fill='tozeroy', name="Drawdown %", line=dict(color='red')))
+            fig_dd.update_layout(template="plotly_dark", title="Underwater Chart (Drawdown %)", yaxis_title="Perdita dal Picco %")
+            st.plotly_chart(fig_dd, use_container_width=True)
             
-            # 1. TABELLA SERIE STORICHE (PRIMA COSA)
-            st.subheader(f"📅 Serie Storiche ({selected_freq_label})")
-            st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=500)
             
-            st.markdown("---")
-
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.subheader("📈 Performance (Base 100)")
-                if not df_final.empty:
-                    df_b100 = (df_final / df_final.iloc[0]) * 100
-                    st.line_chart(df_b100)
             
-            with col2:
-                st.subheader("🏆 Analisi")
-                st.dataframe(pd.DataFrame(metrics).set_index("Ticker"), use_container_width=True)
-
-            st.markdown("---")
+            max_dd = drawdown.min()
+            st.metric("Massimo Drawdown Storico", f"{max_dd:.2%}")
+            st.info("💡 Un Drawdown elevato indica che l'ottimizzazione storica potrebbe essere stata 'fortunata'. Se il Max DD supera la tua tolleranza, riduci il peso massimo degli asset rischiosi.")
             
-            # MATRICE CORRELAZIONE (Dark Style)
-            st.subheader("🔗 Matrice di Correlazione")
-            if len(df_final.columns) > 1:
-                corr = df_final.pct_change().corr()
-                plt.style.use("dark_background")
-                fig, ax = plt.subplots(figsize=(10, 4))
-                sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, 
-                           cbar_kws={'label': 'Correlazione'})
-                st.pyplot(fig)
-
-            # EXPORT
-            st.markdown("### 📥 Download")
-            df_final.index.name = "Data"
-            csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
-            st.download_button(
-                label=f"SCARICA CSV ({selected_freq_label.upper()})", 
-                data=csv, 
-                file_name=f"Analisi_{selected_freq_label}.csv", 
-                mime="text/csv"
-            )
-        else:
-            st.error("Nessun dato valido estratto.")
+    else: st.error("Dati non disponibili.")
