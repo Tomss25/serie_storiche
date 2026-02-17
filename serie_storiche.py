@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 AlphaTool Pro: Hybrid Engine")
+st.title("📊 Asset Historical Data Engine")
 st.markdown("Analisi finanziaria professionale multi-sorgente (Yahoo + Morningstar).")
 st.markdown("---")
 
@@ -260,4 +260,5 @@ with tab_codici:
     st.code("EIMI.MI", language="text")
     st.code("ENEL.MI", language="text")
     st.code("ISP.MI", language="text")
+
 
