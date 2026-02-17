@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURAZIONE PAGINA E STILE CSS ---
-st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
+st.set_page_config(page_title="Asset Historical Data Engine", layout="wide")
 
 st.markdown("""
 <style>
@@ -260,3 +260,4 @@ with tab_codici:
     st.code("EIMI.MI", language="text")
     st.code("ENEL.MI", language="text")
     st.code("ISP.MI", language="text")
+
