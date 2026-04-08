@@ -1,6 +1,5 @@
 import streamlit as st
 import yfinance as yf
-import mstarpy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,8 +7,32 @@ import seaborn as sns
 import re
 from datetime import datetime, timedelta
 
+# =====================================================================
+# 🔥 FIX CRITICO PER MSTARPY SU STREAMLIT CLOUD (Bypass Signal Error)
+# =====================================================================
+import signal
+import threading
+
+# Salviamo la funzione di sistema originale
+_original_signal = signal.signal
+
+# Creiamo una funzione "finta" che blocca il crash
+def _patched_signal(signum, handler):
+    # Se siamo nel thread principale, esegui normalmente
+    if threading.current_thread() is threading.main_thread():
+        return _original_signal(signum, handler)
+    # Se siamo in Streamlit (sub-thread), ignora la richiesta e non fare nulla
+    return None
+
+# Applichiamo la patch
+signal.signal = _patched_signal
+
+# ORA POSSIAMO IMPORTARE MSTARPY SENZA CHE IL CLOUD ESPLODA
+import mstarpy
+# =====================================================================
+
 # --- 1. CONFIGURAZIONE PAGINA E STILE CSS ---
-st.set_page_config(page_title="Asset Historical Data Engine", layout="wide")
+st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
 
 st.markdown("""
 <style>
@@ -48,7 +71,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Asset Historical Data Engine")
+st.title("📊 AlphaTool Pro: Hybrid Engine")
 st.markdown("Analisi finanziaria professionale multi-sorgente (Yahoo + Morningstar).")
 st.markdown("---")
 
@@ -260,5 +283,3 @@ with tab_codici:
     st.code("EIMI.MI", language="text")
     st.code("ENEL.MI", language="text")
     st.code("ISP.MI", language="text")
-
-
