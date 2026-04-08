@@ -226,11 +226,23 @@ with tab_analisi:
                             "Max DD %": round(max_dd, 2)
                         })
 
+                # --- 1. TABELLA SERIE STORICHE ---
                 st.subheader(f"📅 Serie Storiche ({selected_freq_label})")
                 st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=500)
                 
+                # --- 2. BOTTONE DOWNLOAD (Spostato qui sotto la tabella) ---
+                df_final.index.name = "Data"
+                csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
+                st.download_button(
+                    label=f"📥 SCARICA CSV ({selected_freq_label.upper()})", 
+                    data=csv, 
+                    file_name=f"Analisi_{selected_freq_label}.csv", 
+                    mime="text/csv"
+                )
+                
                 st.markdown("---")
 
+                # --- 3. PERFORMANCE E METRICHE ---
                 col1, col2 = st.columns([2, 1])
                 with col1:
                     st.subheader("📈 Performance (Base 100)")
@@ -244,27 +256,17 @@ with tab_analisi:
 
                 st.markdown("---")
                 
+                # --- 4. MATRICE DI CORRELAZIONE ---
                 st.subheader("🔗 Matrice di Correlazione")
                 if len(df_final.columns) > 1:
                     corr = df_final.pct_change().corr()
-                    # Rimosso il dark_background per adattarlo al nuovo tema Light
                     plt.style.use("default") 
                     fig, ax = plt.subplots(figsize=(10, 4))
                     sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, cbar_kws={'label': 'Corr'})
-                    # Imposta sfondo della figura trasparente per uniformità
                     fig.patch.set_alpha(0.0) 
                     ax.patch.set_alpha(0.0)
                     st.pyplot(fig)
 
-                st.markdown("### 📥 Download")
-                df_final.index.name = "Data"
-                csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
-                st.download_button(
-                    label=f"SCARICA CSV ({selected_freq_label.upper()})", 
-                    data=csv, 
-                    file_name=f"Analisi_{selected_freq_label}.csv", 
-                    mime="text/csv"
-                )
             else:
                 st.error("Nessun dato valido estratto.")
     else:
