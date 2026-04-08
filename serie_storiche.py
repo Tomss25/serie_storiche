@@ -16,73 +16,95 @@ import threading
 # Salviamo la funzione di sistema originale
 _original_signal = signal.signal
 
-# Creiamo una funzione "finta" che blocca il crash
 def _patched_signal(signum, handler):
-    # Se siamo nel thread principale, esegui normalmente
     if threading.current_thread() is threading.main_thread():
         return _original_signal(signum, handler)
-    # Se siamo in Streamlit (sub-thread), ignora la richiesta e non fare nulla
     return None
 
-# Applichiamo la patch
 signal.signal = _patched_signal
 
-# ORA POSSIAMO IMPORTARE MSTARPY SENZA CHE IL CLOUD ESPLODA
 import mstarpy
 # =====================================================================
 
-# --- 1. CONFIGURAZIONE PAGINA E STILE CSS ---
+# --- 1. CONFIGURAZIONE PAGINA E STILE CSS (TEMA LIGHT & NAVY) ---
 st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
 
 st.markdown("""
 <style>
-    /* SFONDO GENERALE APP - Grigio Scuro Professionale */
-    .stApp { background-color: #0E1117; color: #FAFAFA; }
+    /* SFONDO GENERALE APP - Light e pulito (Slate 50) */
+    .stApp { background-color: #F8FAFC; color: #0F172A; }
 
-    /* SIDEBAR - Tonalità leggermente più chiara */
-    section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
+    /* SIDEBAR - Sfondo Bianco puro con bordo leggero */
+    section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
     
-    /* TESTI SIDEBAR BIANCHI (Solo etichette e titoli, no input interni) */
+    /* TESTI SIDEBAR E GENERLI - Grigio Scuro quasi nero */
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] p { 
-        color: #FFFFFF !important; 
+    section[data-testid="stSidebar"] p,
+    .stMarkdown p { 
+        color: #1E293B !important; 
     }
 
-    /* 🔥 FIX SELECTBOX: Testo Nero su Sfondo Bianco per leggibilità */
+    /* INPUT TEXT AREA - Sfondo bianco, testo scuro, bordo morbido */
+    .stTextArea textarea { 
+        background-color: #FFFFFF; 
+        color: #0F172A !important; 
+        border: 1px solid #CBD5E1; 
+        border-radius: 8px; 
+    }
+    /* Effetto Focus: Bordo Navy Blue */
+    .stTextArea textarea:focus { 
+        border-color: #1E3A8A; 
+        box-shadow: 0 0 0 1px #1E3A8A; 
+    }
+
+    /* SELECTBOX - Stile chiaro */
     div[data-baseweb="select"] > div {
         background-color: #FFFFFF !important;
         border-radius: 8px;
+        border: 1px solid #CBD5E1;
     }
-    div[data-baseweb="select"] * {
-        color: #000000 !important;
-    }
+    div[data-baseweb="select"] * { color: #0F172A !important; }
 
-    /* INPUT TEXT AREA - Stile Dark */
-    .stTextArea textarea { background-color: #21262D; color: #FFFFFF !important; border: 1px solid #30363D; border-radius: 10px; }
-    .stTextArea textarea:focus { border-color: #3B82F6; box-shadow: 0 0 0 1px #3B82F6; }
-
-    /* BOTTONI - Sfumatura Blu */
+    /* BOTTONI - Gradient Navy Blue Istituzionale */
     div.stButton > button {
-        background: linear-gradient(90deg, #1E3A8A 0%, #3B82F6 100%);
-        color: white; border: none; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 600;
-        transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); width: 100%;
+        background: linear-gradient(90deg, #0B2861 0%, #1E3A8A 100%);
+        color: white !important; 
+        border: none; 
+        padding: 0.5rem 1rem; 
+        border-radius: 8px; 
+        font-weight: 600;
+        transition: all 0.3s ease; 
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+        width: 100%;
     }
     div.stButton > button:hover {
-        background: linear-gradient(90deg, #1E40AF 0%, #60A5FA 100%);
-        transform: translateY(-2px); box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4); border-color: #60A5FA;
+        background: linear-gradient(90deg, #091F4B 0%, #172B6B 100%);
+        transform: translateY(-2px); 
+        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15); 
     }
 
-    /* DATAFRAME E TABELLE */
-    div[data-testid="stDataFrame"] { border: 1px solid #30363D; border-radius: 10px; overflow: hidden; }
+    /* DATAFRAME E TABELLE - Bordi sottili, sfondo bianco */
+    div[data-testid="stDataFrame"] { 
+        border: 1px solid #E2E8F0; 
+        border-radius: 8px; 
+        background-color: #FFFFFF;
+    }
     
-    /* TAB STYLING */
-    button[data-baseweb="tab"] { color: #58A6FF; font-weight: bold; }
+    /* TABS - Testo Navy per la tab attiva */
+    button[data-baseweb="tab"] { color: #1E3A8A; font-weight: 600; }
     
-    /* TITOLI HEADER */
-    h1, h2, h3 { color: #58A6FF !important; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 600; }
+    /* TITOLI HEADER - Blu Navy Elegante */
+    h1, h2, h3 { 
+        color: #1E3A8A !important; 
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+        font-weight: 700; 
+    }
+    
+    /* LINEE DI SEPARAZIONE */
+    hr { border-top: 1px solid #E2E8F0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -151,7 +173,7 @@ def get_data_morningstar(isin, start_dt, end_dt):
     return None
 
 # =========================================================
-# TAB 1: ESECUZIONE ANALISI (Tutto il programma originale)
+# TAB 1: ESECUZIONE ANALISI
 # =========================================================
 with tab_analisi:
     if st.sidebar.button("🔥 ESEGUI ANALISI"):
@@ -225,9 +247,13 @@ with tab_analisi:
                 st.subheader("🔗 Matrice di Correlazione")
                 if len(df_final.columns) > 1:
                     corr = df_final.pct_change().corr()
-                    plt.style.use("dark_background")
+                    # Rimosso il dark_background per adattarlo al nuovo tema Light
+                    plt.style.use("default") 
                     fig, ax = plt.subplots(figsize=(10, 4))
                     sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, cbar_kws={'label': 'Corr'})
+                    # Imposta sfondo della figura trasparente per uniformità
+                    fig.patch.set_alpha(0.0) 
+                    ax.patch.set_alpha(0.0)
                     st.pyplot(fig)
 
                 st.markdown("### 📥 Download")
