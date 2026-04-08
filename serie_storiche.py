@@ -42,8 +42,23 @@ st.markdown("""
     /* SIDEBAR - Tonalità leggermente più chiara */
     section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
     
-    /* TESTI SIDEBAR BIANCHI */
-    section[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* TESTI SIDEBAR BIANCHI (Solo etichette e titoli, no input interni) */
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] p { 
+        color: #FFFFFF !important; 
+    }
+
+    /* 🔥 FIX SELECTBOX: Testo Nero su Sfondo Bianco per leggibilità */
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        border-radius: 8px;
+    }
+    div[data-baseweb="select"] * {
+        color: #000000 !important;
+    }
 
     /* INPUT TEXT AREA - Stile Dark */
     .stTextArea textarea { background-color: #21262D; color: #FFFFFF !important; border: 1px solid #30363D; border-radius: 10px; }
