@@ -8,12 +8,11 @@ import re
 from datetime import datetime, timedelta
 
 # =====================================================================
-# 🔥 FIX CRITICO PER MSTARPY SU STREAMLIT CLOUD (Bypass Signal Error)
+# FIX MSTARPY PER STREAMLIT CLOUD
 # =====================================================================
 import signal
 import threading
 
-# Salviamo la funzione di sistema originale
 _original_signal = signal.signal
 
 def _patched_signal(signum, handler):
@@ -26,84 +25,28 @@ signal.signal = _patched_signal
 import mstarpy
 # =====================================================================
 
-# --- 1. CONFIGURAZIONE PAGINA E STILE CSS (TEMA LIGHT & NAVY) ---
+# --- 1. CONFIGURAZIONE PAGINA E STILE CSS ---
 st.set_page_config(page_title="AlphaTool Pro Hybrid", layout="wide")
 
 st.markdown("""
 <style>
-    /* SFONDO GENERALE APP - Light e pulito (Slate 50) */
     .stApp { background-color: #F8FAFC; color: #0F172A; }
-
-    /* SIDEBAR - Sfondo Bianco puro con bordo leggero */
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E2E8F0; }
-    
-    /* TESTI SIDEBAR E GENERLI - Grigio Scuro quasi nero */
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] p,
-    .stMarkdown p { 
-        color: #1E293B !important; 
-    }
-
-    /* INPUT TEXT AREA - Sfondo bianco, testo scuro, bordo morbido */
-    .stTextArea textarea { 
-        background-color: #FFFFFF; 
-        color: #0F172A !important; 
-        border: 1px solid #CBD5E1; 
-        border-radius: 8px; 
-    }
-    /* Effetto Focus: Bordo Navy Blue */
-    .stTextArea textarea:focus { 
-        border-color: #1E3A8A; 
-        box-shadow: 0 0 0 1px #1E3A8A; 
-    }
-
-    /* SELECTBOX - Stile chiaro */
-    div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        border-radius: 8px;
-        border: 1px solid #CBD5E1;
-    }
+    .stMarkdown p { color: #1E293B !important; }
+    .stTextArea textarea { background-color: #FFFFFF; color: #0F172A !important; border: 1px solid #CBD5E1; border-radius: 8px; }
+    .stTextArea textarea:focus { border-color: #1E3A8A; box-shadow: 0 0 0 1px #1E3A8A; }
+    div[data-baseweb="select"] > div { background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #CBD5E1; }
     div[data-baseweb="select"] * { color: #0F172A !important; }
-
-    /* BOTTONI - Gradient Navy Blue Istituzionale */
-    div.stButton > button {
-        background: linear-gradient(90deg, #0B2861 0%, #1E3A8A 100%);
-        color: white !important; 
-        border: none; 
-        padding: 0.5rem 1rem; 
-        border-radius: 8px; 
-        font-weight: 600;
-        transition: all 0.3s ease; 
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
-        width: 100%;
-    }
-    div.stButton > button:hover {
-        background: linear-gradient(90deg, #091F4B 0%, #172B6B 100%);
-        transform: translateY(-2px); 
-        box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15); 
-    }
-
-    /* DATAFRAME E TABELLE - Bordi sottili, sfondo bianco */
-    div[data-testid="stDataFrame"] { 
-        border: 1px solid #E2E8F0; 
-        border-radius: 8px; 
-        background-color: #FFFFFF;
-    }
-    
-    /* TABS - Testo Navy per la tab attiva */
+    div.stButton > button { background: linear-gradient(90deg, #0B2861 0%, #1E3A8A 100%); color: white !important; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); width: 100%; }
+    div.stButton > button:hover { background: linear-gradient(90deg, #091F4B 0%, #172B6B 100%); transform: translateY(-2px); box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15); }
+    div[data-testid="stDataFrame"] { border: 1px solid #E2E8F0; border-radius: 8px; background-color: #FFFFFF; }
     button[data-baseweb="tab"] { color: #1E3A8A; font-weight: 600; }
-    
-    /* TITOLI HEADER - Blu Navy Elegante */
-    h1, h2, h3 { 
-        color: #1E3A8A !important; 
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-        font-weight: 700; 
-    }
-    
-    /* LINEE DI SEPARAZIONE */
+    h1, h2, h3 { color: #1E3A8A !important; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-weight: 700; }
     hr { border-top: 1px solid #E2E8F0; }
 </style>
 """, unsafe_allow_html=True)
@@ -112,10 +55,8 @@ st.title("📊 AlphaTool Pro: Hybrid Engine")
 st.markdown("Analisi finanziaria professionale multi-sorgente (Yahoo + Morningstar).")
 st.markdown("---")
 
-# --- CREAZIONE TAB ---
 tab_analisi, tab_codici = st.tabs(["📉 ANALISI & GRAFICI", "📋 CODICI UTILI (Copia/Incolla)"])
 
-# --- SIDEBAR: CONFIGURAZIONE (SEMPRE VISIBILE) ---
 st.sidebar.header("⚙️ Configurazione")
 
 raw_input = st.sidebar.text_area(
@@ -125,7 +66,6 @@ raw_input = st.sidebar.text_area(
     help="Inserisci i codici qui. Vedi la tab 'Codici Utili' per suggerimenti."
 )
 
-# --- INTELLIGENZA ALIAS ---
 ALIAS_MAP = {
     "SP500": "^GSPC", "S&P500": "^GSPC", "NASDAQ": "^NDX", "NASDAQ100": "^NDX",
     "DOWJONES": "^DJI", "DAX": "^GDAXI", "CAC40": "^FCHI", "ESTX50": "^STOXX50E",
@@ -134,10 +74,7 @@ ALIAS_MAP = {
 }
 
 raw_tokens = re.findall(r"[\w\.\-\^\=]+", raw_input.upper())
-tickers_input = []
-for t in raw_tokens:
-    if t in ALIAS_MAP: tickers_input.append(ALIAS_MAP[t])
-    else: tickers_input.append(t)
+tickers_input = [ALIAS_MAP.get(t, t) for t in raw_tokens]
 
 years = st.sidebar.selectbox("Orizzonte Temporale", [1, 3, 5, 10, 20], index=1)
 freq_options = {"Giornaliero": "D", "Settimanale": "W", "Mensile": "ME"}
@@ -147,17 +84,25 @@ selected_freq_code = freq_options[selected_freq_label]
 start_date = datetime.now() - timedelta(days=years*365)
 end_date = datetime.now()
 
-# --- FUNZIONI DI ESTRAZIONE ---
+# --- FUNZIONI DI ESTRAZIONE CON CACHING OTTIMIZZATO ---
+@st.cache_data(show_spinner=False, ttl=3600)
 def get_data_yahoo(ticker, start_dt):
     try:
         df = yf.download(ticker, start=start_dt, progress=False)
         if not df.empty:
             col = 'Adj Close' if 'Adj Close' in df.columns else 'Close'
             series = df[col].squeeze()
-            if isinstance(series, pd.Series): return series.ffill()
-    except: return None
+            if isinstance(series, pd.Series):
+                # FIX TIMEZONE: Rimuove la localizzazione fuso orario di yfinance
+                if series.index.tz is not None:
+                    series.index = series.index.tz_localize(None)
+                series.name = ticker
+                return series.ffill()
+    except Exception as e:
+        st.warning(f"Errore Yahoo per {ticker}: {str(e)}")
     return None
 
+@st.cache_data(show_spinner=False, ttl=3600)
 def get_data_morningstar(isin, start_dt, end_dt):
     try:
         fund = mstarpy.Funds(term=isin, country="it")
@@ -167,9 +112,12 @@ def get_data_morningstar(isin, start_dt, end_dt):
             df['date'] = pd.to_datetime(df['date'])
             df.set_index('date', inplace=True)
             series = df['nav']
+            # FIX TIMEZONE: Normalizza e rimuove timezone per compatibilità
             series.index = series.index.normalize().tz_localize(None)
+            series.name = isin
             return series
-    except: return None
+    except Exception as e:
+        st.warning(f"Errore Morningstar per {isin}: {str(e)}")
     return None
 
 # =========================================================
@@ -182,93 +130,94 @@ with tab_analisi:
         else:
             all_series = {}
             
-            with st.spinner('Ricerca in corso...'):
+            with st.spinner('Estrazione dati dal mercato...'):
                 for t in tickers_input:
-                    series = None
-                    # 1. YAHOO
+                    # 1. Tentativo Yahoo Finance
                     series = get_data_yahoo(t, start_date)
-                    # 2. MORNINGSTAR
+                    
+                    # 2. Tentativo Morningstar se Yahoo fallisce
                     if series is None:
                         series = get_data_morningstar(t, start_date, end_date)
 
-                    if series is not None:
-                        series.name = t 
+                    if series is not None and not series.empty:
                         all_series[t] = series
                     else:
-                        st.warning(f"⚠️ Dati non trovati per {t}")
+                        st.error(f"⚠️ Dati inesistenti o irraggiungibili per: {t}")
 
             if all_series:
+                # Merge sicuro grazie al fix sui timezone
                 df_daily = pd.DataFrame(all_series).ffill().dropna()
                 
-                if selected_freq_code == "D":
-                    df_final = df_daily
-                    ann_factor = 252
+                if df_daily.empty:
+                    st.error("Impossibile allineare le serie storiche (date non sovrapponibili).")
                 else:
-                    df_final = df_daily.resample(selected_freq_code).last()
-                    ann_factor = 52 if selected_freq_code == "W" else 12
+                    if selected_freq_code == "D":
+                        df_final = df_daily
+                        ann_factor = 252
+                    else:
+                        df_final = df_daily.resample(selected_freq_code).last()
+                        ann_factor = 52 if selected_freq_code == "W" else 12
 
-                metrics = []
-                for col in df_final.columns:
-                    s = df_final[col]
-                    if len(s) > 1:
-                        returns = s.pct_change().dropna()
-                        tot_ret = ((s.iloc[-1] / s.iloc[0]) - 1) * 100
-                        vol = returns.std() * np.sqrt(ann_factor) * 100
-                        roll_max = s.cummax()
-                        drawdown = (s - roll_max) / roll_max
-                        max_dd = drawdown.min() * 100
-                        
-                        metrics.append({
-                            "Ticker": col,
-                            "Prezzo": round(s.iloc[-1], 2),
-                            "Rend %": round(tot_ret, 2),
-                            "Volat %": round(vol, 2),
-                            "Max DD %": round(max_dd, 2)
-                        })
+                    metrics = []
+                    for col in df_final.columns:
+                        s = df_final[col]
+                        if len(s) > 1:
+                            returns = s.pct_change().dropna()
+                            tot_ret = ((s.iloc[-1] / s.iloc[0]) - 1) * 100
+                            vol = returns.std() * np.sqrt(ann_factor) * 100
+                            roll_max = s.cummax()
+                            drawdown = (s - roll_max) / roll_max
+                            max_dd = drawdown.min() * 100
+                            
+                            metrics.append({
+                                "Ticker": col,
+                                "Prezzo": round(s.iloc[-1], 2),
+                                "Rend %": round(tot_ret, 2),
+                                "Volat %": round(vol, 2),
+                                "Max DD %": round(max_dd, 2)
+                            })
 
-                # --- 1. TABELLA SERIE STORICHE ---
-                st.subheader(f"📅 Serie Storiche ({selected_freq_label})")
-                st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=500)
-                
-                # --- 2. BOTTONE DOWNLOAD (Spostato qui sotto la tabella) ---
-                df_final.index.name = "Data"
-                csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
-                st.download_button(
-                    label=f"📥 SCARICA CSV ({selected_freq_label.upper()})", 
-                    data=csv, 
-                    file_name=f"Analisi_{selected_freq_label}.csv", 
-                    mime="text/csv"
-                )
-                
-                st.markdown("---")
+                    # --- UI RISULTATI ---
+                    st.subheader(f"📅 Serie Storiche ({selected_freq_label})")
+                    st.dataframe(df_final.sort_index(ascending=False).round(2), use_container_width=True, height=300)
+                    
+                    df_final.index.name = "Data"
+                    csv = df_final.to_csv(sep=";", decimal=",", encoding="utf-8-sig")
+                    st.download_button(
+                        label=f"📥 SCARICA CSV ({selected_freq_label.upper()})", 
+                        data=csv, 
+                        file_name=f"Analisi_{selected_freq_label}.csv", 
+                        mime="text/csv"
+                    )
+                    
+                    st.markdown("---")
 
-                # --- 3. PERFORMANCE E METRICHE ---
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.subheader("📈 Performance (Base 100)")
-                    if not df_final.empty:
-                        df_b100 = (df_final / df_final.iloc[0]) * 100
-                        st.line_chart(df_b100)
-                
-                with col2:
-                    st.subheader("🏆 Analisi")
-                    st.dataframe(pd.DataFrame(metrics).set_index("Ticker"), use_container_width=True)
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.subheader("📈 Performance (Base 100)")
+                        if not df_final.empty:
+                            df_b100 = (df_final / df_final.iloc[0]) * 100
+                            st.line_chart(df_b100)
+                    
+                    with col2:
+                        st.subheader("🏆 Metriche di Rischio")
+                        if metrics:
+                            st.dataframe(pd.DataFrame(metrics).set_index("Ticker"), use_container_width=True)
 
-                st.markdown("---")
-                
-                # --- 4. MATRICE DI CORRELAZIONE ---
-                st.subheader("🔗 Matrice di Correlazione")
-                if len(df_final.columns) > 1:
-                    corr = df_final.pct_change().corr()
-                    plt.style.use("default") 
-                    fig, ax = plt.subplots(figsize=(10, 4))
-                    sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, cbar_kws={'label': 'Corr'})
-                    fig.patch.set_alpha(0.0) 
-                    ax.patch.set_alpha(0.0)
-                    st.pyplot(fig)
-
+                    st.markdown("---")
+                    
+                    st.subheader("🔗 Matrice di Correlazione")
+                    if len(df_final.columns) > 1:
+                        corr = df_final.pct_change().corr()
+                        fig, ax = plt.subplots(figsize=(10, 4))
+                        sns.heatmap(corr, annot=True, cmap="RdYlGn", fmt=".2f", vmin=-1, vmax=1, ax=ax, cbar_kws={'label': 'Corr'})
+                        fig.patch.set_alpha(0.0) 
+                        ax.patch.set_alpha(0.0)
+                        st.pyplot(fig)
+                    else:
+                        st.info("Inserisci almeno due strumenti per visualizzare la matrice di correlazione.")
             else:
-                st.error("Nessun dato valido estratto.")
+                st.error("Estrazione fallita per tutti i codici inseriti.")
     else:
         st.info("👈 Configura i parametri nella Sidebar e premi 'ESEGUI ANALISI' per iniziare.")
 
@@ -277,52 +226,32 @@ with tab_analisi:
 # =========================================================
 with tab_codici:
     st.header("📋 Codici Pronti all'Uso")
-    st.markdown("Copia questi codici e incollali nella barra laterale. Hanno il tasto copia integrato.")
+    st.markdown("Copia questi codici e incollali nella barra laterale.")
     
     col_a, col_b = st.columns(2)
-    
     with col_a:
         st.subheader("🇺🇸 Indici USA")
-        st.caption("S&P 500")
-        st.code("^GSPC", language="text")
-        st.caption("NASDAQ 100")
-        st.code("^NDX", language="text")
-        st.caption("Dow Jones Industrial")
-        st.code("^DJI", language="text")
-        st.caption("VIX (Volatilità)")
-        st.code("^VIX", language="text")
+        st.caption("S&P 500"); st.code("^GSPC", language="text")
+        st.caption("NASDAQ 100"); st.code("^NDX", language="text")
+        st.caption("Dow Jones"); st.code("^DJI", language="text")
+        st.caption("VIX"); st.code("^VIX", language="text")
 
         st.subheader("🇪🇺 Indici Europa")
-        st.caption("FTSE MIB (Italia)")
-        st.code("FTSEMIB.MI", language="text")
-        st.caption("DAX (Germania)")
-        st.code("^GDAXI", language="text")
-        st.caption("CAC 40 (Francia)")
-        st.code("^FCHI", language="text")
-        st.caption("Euro Stoxx 50")
-        st.code("^STOXX50E", language="text")
+        st.caption("FTSE MIB (Italia)"); st.code("FTSEMIB.MI", language="text")
+        st.caption("DAX (Germania)"); st.code("^GDAXI", language="text")
+        st.caption("Euro Stoxx 50"); st.code("^STOXX50E", language="text")
 
     with col_b:
         st.subheader("🛢️ Materie Prime")
-        st.caption("Oro (Gold Futures)")
-        st.code("GC=F", language="text")
-        st.caption("Petrolio (Crude Oil)")
-        st.code("CL=F", language="text")
-        st.caption("Argento (Silver)")
-        st.code("SI=F", language="text")
+        st.caption("Oro"); st.code("GC=F", language="text")
+        st.caption("Petrolio"); st.code("CL=F", language="text")
 
         st.subheader("₿ Crypto & Valute")
-        st.caption("Bitcoin (USD)")
-        st.code("BTC-USD", language="text")
-        st.caption("Ethereum (USD)")
-        st.code("ETH-USD", language="text")
-        st.caption("Cambio Euro/Dollaro")
-        st.code("EURUSD=X", language="text")
+        st.caption("Bitcoin"); st.code("BTC-USD", language="text")
+        st.caption("EUR/USD"); st.code("EURUSD=X", language="text")
         
     st.markdown("---")
     st.subheader("🇮🇹 Esempi ETF & Azioni (Milano)")
     st.caption("Per Milano usare sempre il suffisso **.MI**")
     st.code("SWDA.MI", language="text")
     st.code("EIMI.MI", language="text")
-    st.code("ENEL.MI", language="text")
-    st.code("ISP.MI", language="text")
